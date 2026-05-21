@@ -1,0 +1,2 @@
+[napari.manifest]
+lu-lab-tracker = lu_lab_tracker:napari.yaml

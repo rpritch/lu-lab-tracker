@@ -1,0 +1,79 @@
+name: lu-lab-tracker
+display_name: Lu Lab Tracker
+# use 'hidden' to remove plugin from napari hub search results
+visibility: hidden
+# see https://napari.org/stable/plugins/technical_references/manifest.html#fields for valid categories
+# categories: []
+contributions:
+  commands:
+    - id: lu-lab-tracker.get_h5_reader
+      python_name: lu_lab_tracker._reader:get_h5_reader
+      title: Lazy Load HDF5 Imaging Data
+    - id: lu-lab-tracker.get_sequence_reader
+      python_name: lu_lab_tracker._reader:get_sequence_reader
+      title: Lazy Load a TIFF Image Sequence
+    - id: lu-lab-tracker.get_h5_points_reader
+      python_name: lu_lab_tracker._reader:get_h5_points_reader
+      title: Load Annotations from HDF5 File
+    - id: lu-lab-tracker.get_csv_points_reader
+      python_name: lu_lab_tracker._reader:get_csv_points_reader
+      title: Load Annotations from CSV File
+
+    - id: lu-lab-tracker.save_h5_tracks
+      python_name: lu_lab_tracker._writer:save_h5_tracks
+      title: Save Tracks to HDF5
+    - id: lu-lab-tracker.save_csv_tracks
+      python_name: lu_lab_tracker._writer:save_csv_tracks
+      title: Save Tracks to CSV
+
+    - id: lu-lab-tracker.make_tracking_widget
+      python_name: lu_lab_tracker._widget:make_tracking_widget
+      title: Open Tracking Widget
+
+  readers:
+    - command: lu-lab-tracker.get_h5_points_reader
+      accepts_directories: False
+      filename_patterns: ["*.h5","*.hdf5"]
+    - command: lu-lab-tracker.get_csv_points_reader
+      accepts_directories: False
+      filename_patterns: ["*.csv"]
+
+    - command: lu-lab-tracker.get_h5_reader
+      accepts_directories: false
+      filename_patterns: ['*.h5',"*.hdf5"]
+    - command: lu-lab-tracker.get_sequence_reader
+      accepts_directories: true
+      filename_patterns: ['*']
+
+  writers:
+    - command: lu-lab-tracker.save_csv_tracks
+      layer_types: ['points']
+      filename_extensions: ['.csv']
+    - command: lu-lab-tracker.save_h5_tracks
+      layer_types: ["points"]
+      filename_extensions: [".h5"]
+
+  widgets:
+    - command: lu-lab-tracker.make_tracking_widget
+      display_name: Lu Lab Tracker
+
+  submenus:
+    - id: lu_lab_tracker.main_submenu
+      label: Lu Lab Tracker
+
+  menus:
+    # 1. Put your widget in the main Plugins menu under a clean submenu
+    napari/window/plugins:
+      - submenu: lu_lab_tracker.main_submenu
+    
+    # 2. Assign your widget to that submenu
+    lu_lab_tracker.main_submenu:
+      - command: lu-lab-tracker.make_tracking_widget
+
+    # 3. THE POWER MOVE: Add "Open Tracker" to the layer right-click menu
+    # This will only show up if the user right-clicks an IMAGE layer.
+    napari/layers/context:
+      - command: lu-lab-tracker.make_tracking_widget
+        when: "selected_layer_type == 'image'"
+        group: navigation
+
