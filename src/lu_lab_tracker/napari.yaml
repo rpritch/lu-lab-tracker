@@ -26,8 +26,8 @@ contributions:
       python_name: lu_lab_tracker._writer:save_csv_tracks
       title: Save Tracks to CSV
 
-    - id: lu-lab-tracker.make_tracking_widget
-      python_name: lu_lab_tracker._widget:make_tracking_widget
+    - id: lu-lab-tracker.TrackingWidget
+      python_name: lu_lab_tracker._widget:TrackingWidget
       title: Open Tracking Widget
 
   readers:
@@ -54,7 +54,7 @@ contributions:
       filename_extensions: [".h5"]
 
   widgets:
-    - command: lu-lab-tracker.make_tracking_widget
+    - command: lu-lab-tracker.TrackingWidget
       display_name: Lu Lab Tracker
 
   submenus:
@@ -68,12 +68,12 @@ contributions:
     
     # 2. Assign your widget to that submenu
     lu_lab_tracker.main_submenu:
-      - command: lu-lab-tracker.make_tracking_widget
+      - command: lu-lab-tracker.TrackingWidget
 
     # 3. THE POWER MOVE: Add "Open Tracker" to the layer right-click menu
     # This will only show up if the user right-clicks an IMAGE layer.
     napari/layers/context:
-      - command: lu-lab-tracker.make_tracking_widget
+      - command: lu-lab-tracker.TrackingWidget
         when: "selected_layer_type == 'image'"
         group: navigation
 

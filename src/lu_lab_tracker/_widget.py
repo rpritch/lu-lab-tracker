@@ -1,138 +1,143 @@
+from __future__ import annotations
 import numpy as np
-from magicgui import magicgui
-from napari.layers import Points, Image
 import napari
+from napari.layers import Image, Points
+from qtpy.QtWidgets import QWidget, QVBoxLayout, QSpinBox, QComboBox, QLabel, QPushButton
+from typing import TYPE_CHECKING
 
-def make_tracking_widget():
-    """
-    Creates a widget to manage tracking state and keybindings.
-    """
+if TYPE_CHECKING:
+    import napari.viewer
 
-    @magicgui(
-        call_button=False,
-        current_label={"widget_type": "SpinBox", "value": 1},
-    )
-    def tracking_controls(viewer: "napari.Viewer", current_label: int):
-        pass
-
-    @tracking_controls.parent.changed.connect
-    def _init_widget(viewer: "napari.Viewer"):
-        # Find the points layer (usually the one loaded by your readers)
-        points_layer = None
-        for layer in viewer.layers:
-            if isinstance(layer, Points):
-                points_layer = layer
-                break
+class TrackingWidget(QWidget):
+    def __init__(self, viewer: napari.viewer.Viewer, parent=None):
+        super().__init__(parent)
+        self.viewer = viewer
         
-        if points_layer is None:
+        # 1. Setup Layout
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+
+        # 2. UI Elements
+        layout.addWidget(QLabel("Target Layer:"))
+        self.layer_combo = QComboBox()
+        self._update_layer_choices()
+        layout.addWidget(self.layer_combo)
+        self.start_button = QPushButton(text="Start Tracking")
+        self.start_button.clicked.connect(self._setup_points_layer)
+        layout.addWidget(self.start_button)
+
+        layout.addWidget(QLabel("Current Label:"))
+        self.label_spin = QSpinBox()
+        self.label_spin.setRange(1, 9999)
+        self.label_spin.setValue(1)
+        # --- Sync label changes to the layer --- #
+        self.label_spin.valueChanged.connect(self._on_label_changed)
+        layout.addWidget(self.label_spin)
+
+
+        # 3. Layer Management Setup
+        self.viewer.layers.events.inserted.connect(self._update_layer_choices)
+        self.viewer.layers.events.removed.connect(self._update_layer_choices)
+        self.layer_combo.currentIndexChanged.connect(self._on_active_layer_change)
+
+        # 3. Ensure a Tracking layer exists
+        self._update_layer_choices()
+        self._setup_keybindings()
+
+    def _get_image_layers(self) -> list[Image]:
+        """Helper to find all Points layers."""
+        return [l for l in self.viewer.layers if isinstance(l, Image)]
+
+    def _update_layer_choices(self, event=None):
+        """Syncs the QComboBox with current Points layers."""
+        self.layer_combo.clear()
+        layers = self._get_image_layers()
+        for layer in layers:
+            self.layer_combo.addItem(layer.name, layer)
+
+    @property
+    def active_layer(self) -> Points | None:
+        """Returns the currently selected layer object from the combo box."""
+        return self.layer_combo.currentData()
+    
+    def _on_active_layer_change(self):
+        """Configure the layer for tracking when it is selected in the widget."""
+        layer = self.active_layer
+        if layer is None:
             return
+        self.points_layer = layer
+        # Ensure 'track_id' exists in features
+        if 'track_id' not in layer.features:
+            layer.features['track_id'] = np.array([], dtype=int)
+        
+        # 1. Setup Coloring: Color by track_id using a colormap
+        layer.face_color = 'track_id'
+        layer.face_color_mode = 'cycle' # Uses a color cycle for distinct IDs
+        
+        # 2. Setup Label Display: Show the track_id on the point
+        layer.text = {
+            'string': '{track_id}',
+            'size': 12,
+            'color': 'white',
+            'translation': [0, -10], # Offset label slightly above point
+        }
+        
+        # 3. Sync the current spinbox value to the layer's "next point" property
+        self._on_label_changed()
 
-        # Ensure points are colored by their track_id
-        points_layer.face_color = 'track_id'
-        points_layer.face_color_cycle = 'viridis'
+    def _on_label_changed(self):
+        if self.points_layer is not None:
+            self.points_layer.current_features = {'track_id': self.label_spin.value()}
+        return
+    
+    def _setup_points_layer(self):
+        self.points_layer.current_features = {'track_id':self.label_spin.value()}
 
-        # Helper: Get current frame and slice
-        def get_dims():
-            # dims.current_step is (t, z, y, x)
-            return list(viewer.dims.current_step)
+    def _setup_keybindings(self):
+        """Binds tracking navigation and labeling keys to the viewer."""
+        @self.viewer.bind_key('q', overwrite=True)
+        def dec_frame(_):
+            self._move_dim(0, -1)
 
-        def set_mode_to_select():
-            points_layer.mode = 'select'
+        @self.viewer.bind_key('e', overwrite=True)
+        def inc_frame(_):
+            self._move_dim(0, 1)
 
-        # --- KEYMAPPINGS ---
+        @self.viewer.bind_key('w', overwrite=True)
+        def inc_slice(_):
+            self._move_dim(1, 1)
 
-        @points_layer.bind_key('q')
-        def dec_frame(viewer):
-            step = get_dims()
-            step[0] = max(0, step[0] - 1)
-            viewer.dims.current_step = step
-            set_mode_to_select()
+        @self.viewer.bind_key('s', overwrite=True)
+        def dec_slice(_):
+            self._move_dim(1, -1)
 
-        @points_layer.bind_key('e')
-        def inc_frame(viewer):
-            step = get_dims()
-            step[0] = min(viewer.dims.range[0][1], step[0] + 1)
-            viewer.dims.current_step = step
-            set_mode_to_select()
+        @self.viewer.bind_key('c', overwrite=True)
+        def inc_label(_):
+            self.label_spin.setValue(self.label_spin.value() + 1)
 
-        @points_layer.bind_key('s')
-        def dec_slice(viewer):
-            step = get_dims()
-            step[1] = max(0, step[1] - 1)
-            viewer.dims.current_step = step
+        @self.viewer.bind_key('x', overwrite=True)
+        def dec_label(_):
+            self.label_spin.setValue(max(1, self.label_spin.value() - 1))
 
-        @points_layer.bind_key('w')
-        def inc_slice(viewer):
-            step = get_dims()
-            step[1] = min(viewer.dims.range[1][1], step[1] + 1)
-            viewer.dims.current_step = step
+        @self.viewer.bind_key('r', overwrite=True)
+        def reassign_label(_):
+            layer = self.active_layer
+            if layer and len(layer.selected_data) > 0:
+                # Modern napari uses a DataFrame for features
+                if 'track_id' not in layer.features:
+                    layer.features['track_id'] = np.zeros(len(layer.data), dtype=int)
+                
+                for idx in layer.selected_data:
+                    layer.features.loc[idx, 'track_id'] = self.label_spin.value()
+                
+                layer.face_color = 'track_id'
+                layer.refresh_colors()
 
-        @points_layer.bind_key('x')
-        def dec_label(viewer):
-            tracking_controls.current_label.value = max(0, tracking_controls.current_label.value - 1)
+    def _move_dim(self, dimension: int, delta: int):
+        """Helper to navigate Time (0) or Z (1) axes."""
+        step = list(self.viewer.dims.current_step)
+        if dimension < len(step):
+            max_val = int(self.viewer.dims.range[dimension][1])
+            step[dimension] = np.clip(step[dimension] + delta, 0, max_val)
+            self.viewer.dims.current_step = tuple(step)
 
-        @points_layer.bind_key('c')
-        def inc_label(viewer):
-            tracking_controls.current_label.value += 1
-
-        @points_layer.bind_key('y')
-        def yank_label(viewer):
-            if len(points_layer.selected_data) > 0:
-                idx = list(points_layer.selected_data)[0]
-                val = points_layer.features['track_id'][idx]
-                tracking_controls.current_label.value = int(val)
-
-        @points_layer.bind_key('f')
-        def find_label(viewer):
-            t = get_dims()[0]
-            mask = (points_layer.features['track_id'] == tracking_controls.current_label.value) & \
-                   (points_layer.data[:, 0] == t)
-            if np.any(mask):
-                coords = points_layer.data[mask][0]
-                viewer.dims.current_step = coords[:2] # Move to T and Z
-
-        @points_layer.bind_key('r')
-        def reassign_label(viewer):
-            if len(points_layer.selected_data) > 0:
-                for idx in points_layer.selected_data:
-                    points_layer.features['track_id'][idx] = tracking_controls.current_label.value
-                points_layer.refresh_colors()
-
-        @points_layer.bind_key('n')
-        def next_label(viewer):
-            t_curr = get_dims()[0]
-            all_labels = set(points_layer.features['track_id'])
-            labels_in_frame = set(points_layer.features['track_id'][points_layer.data[:, 0] == t_curr])
-            candidates = sorted(list(all_labels - labels_in_frame))
-            if candidates:
-                tracking_controls.current_label.value = candidates[0]
-
-        @points_layer.bind_key('m')
-        def new_label(viewer):
-            max_label = np.max(points_layer.features['track_id']) if len(points_layer.data) > 0 else 0
-            tracking_controls.current_label.value = int(max_label + 1)
-
-        @points_layer.bind_key('p')
-        def change_provenance(viewer):
-            if len(points_layer.selected_data) > 0:
-                for idx in points_layer.selected_data:
-                    points_layer.features['provenance'][idx] = "manual"
-                print("Provenance updated to manual.")
-
-        @points_layer.bind_key('z')
-        def move_to_slice(viewer):
-            if len(points_layer.selected_data) > 0:
-                z_curr = get_dims()[1]
-                for idx in points_layer.selected_data:
-                    points_layer.data[idx, 1] = z_curr
-                points_layer.data = points_layer.data # Trigger visual update
-
-        @points_layer.bind_key('3')
-        def mode_select(viewer):
-            points_layer.mode = 'select'
-
-        @points_layer.bind_key('4')
-        def mode_pan(viewer):
-            points_layer.mode = 'pan_zoom'
-
-    return tracking_controls
