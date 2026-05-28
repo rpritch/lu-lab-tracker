@@ -150,33 +150,32 @@ def read_csv_points(path):
     
     # Standardize column names
     name_map = {
-        "object_id": "id",
-        "ObjectID": "id",
-        "TrackID": "worldline_id",
-        "t": "t_idx"
+        "ObjectID": "object_id",
+        "TrackID": "track_id",
+        "t_idx": "t"
     }
     df.rename(columns=name_map, inplace=True)
     
     # 2. Ensure essential columns exist
     # If no track/worldline ID exists, treat every point as its own object
-    if "worldline_id" not in df.columns:
-        df["worldline_id"] = df["id"]
+    if "track_id" not in df.columns:
+        df["track_id"] = df["object_id"]
         
     # Add provenance if missing (logic from get_annotation_csv)
     if "provenance" not in df.columns:
-        df["provenance"] = "ascent"
+        df["provenance"] = "csv"
 
     # 3. Extract coordinates and features (logic from getAscentPointsData)
     # Expected order: Time, Z, Y, X
     try:
-        coords = df[["t_idx", "z", "y", "x"]].to_numpy().astype(float)
+        coords = df[["t", "z", "y", "x"]].to_numpy().astype(float)
     except KeyError:
         # Fallback for 2D data if 'z' is missing in some CSVs
-        coords = df[["t_idx", "y", "x"]].to_numpy().astype(float)
+        coords = df[["t", "y", "x"]].to_numpy().astype(float)
 
     features = {
-        "track_id": df["worldline_id"].to_numpy(),
-        "point_id": df["id"].to_numpy(),
+        "track_id": df["track_id"].to_numpy(),
+        "object_id": df["object_id"].to_numpy(),
         "provenance": df["provenance"].to_numpy(),
     }
 
@@ -184,7 +183,7 @@ def read_csv_points(path):
     add_kwargs = {
         "name": path.stem,
         "features": features,
-        "face_color": "track_id", # Color points by worldline_id
+        "face_color": "track_id", # Color points by track_id
         "face_color_cycle": "viridis",
         "size": 5,
         "metadata": {"source": path},
@@ -277,7 +276,7 @@ def get_csv_points_reader(path):
             
             # Define the 'must-have' columns to distinguish this 
             # from a random CSV file.
-            required_columns = {'t_idx', 'x', 'y'}
+            required_columns = {'t', 'x', 'y'}
             
             # If the CSV doesn't have our core coordinates, reject it
             if not required_columns.issubset(df_peek.columns):

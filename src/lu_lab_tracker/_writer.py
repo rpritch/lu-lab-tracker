@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
-from Typing import Any
+from typing import Any
 
 def save_h5_tracks(path: str, data: Any, meta: dict) -> str:
     """
@@ -64,10 +64,14 @@ def save_csv_tracks(path: str, data: Any, meta: dict) -> str:
     
     # Use .get() with fallbacks to prevent errors if features are missing
     track_ids = features.get('track_id', np.zeros(len(coords)))
-    object_ids = features.get('point_id', np.arange(len(coords)))
+    object_ids = features.get('object_id', np.arange(len(coords)))
     
     # 3. Create DataFrame with the specific headers from your save_csv() logic
-    df = pd.DataFrame(coords, columns=['t', 'z', 'y', 'x'])
+    if coords.shape[1] == 4: # 3D + t
+        df = pd.DataFrame(coords, columns=['t', 'z', 'y', 'x'])
+    elif coords.shape[1] == 3: # 2D + t
+        df = pd.DataFrame(coords, columns=['t','y','x'])
+
     df['TrackID'] = track_ids
     df['ObjectID'] = object_ids
     
